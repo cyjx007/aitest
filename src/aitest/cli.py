@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 from .core import Case, Evaluator
+from .model import HttpModelAdapter
+from .report import Report
 
 
 class EchoAdapter:
@@ -24,18 +26,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("file", nargs="?", type=Path, help="JSON test-case file")
     parser.add_argument("--json", action="store_true", dest="as_json",
                         help="emit machine-readable JSON")
+    parser.add_argument("--url", help="use a JSON-over-HTTP model endpoint")
+    parser.add_argument("--timeout", type=float, default=30.0, help="model request timeout in seconds")
     args = parser.parse_args(argv)
 
     if args.file is None:
         parser.print_help()
         return 0
 
-    results = Evaluator(EchoAdapter()).run(load_cases(args.file))
+    adapter = HttpModelAdapter(args.url, args.timeout) if args.url else EchoAdapter()
+    report = Report(Evaluator(adapter).run(load_cases(args.file)))
+    results = report.results
 
     if args.as_json:
         print(json.dumps(
-            {"passed": all(r.passed for r in results),
-             "results": [r.to_dict() for r in results]},
+            report.to_dict(),
             indent=2,
             ensure_ascii=False,
         ))
