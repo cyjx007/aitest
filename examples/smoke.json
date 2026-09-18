@@ -1,0 +1,13 @@
+[
+  {
+    "id": "echo-1",
+    "input": "hello",
+    "expected_contains": ["hello"],
+    "expected_not_contains": ["error"]
+  },
+  {
+    "id": "echo-2",
+    "input": "AI regression test",
+    "expected_contains": ["regression", "test"]
+  }
+]
