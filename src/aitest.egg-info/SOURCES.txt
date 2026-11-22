@@ -2,6 +2,7 @@ LICENSE
 README.md
 pyproject.toml
 src/aitest/__init__.py
+src/aitest/__main__.py
 src/aitest/cli.py
 src/aitest/core.py
 src/aitest/model.py

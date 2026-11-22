@@ -198,6 +198,7 @@ src/aitest/
   model.py     JSON-over-HTTP 适配器
   report.py    报告聚合与 JSON 序列化
   cli.py       argparse 入口（含 Echo 适配器）
+  __main__.py  支持 `python -m aitest`
 examples/      smoke.json、http-model.json
 tests/         使用假适配器的 unittest 测试
 ```

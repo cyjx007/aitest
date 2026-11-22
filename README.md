@@ -210,7 +210,8 @@ src/aitest/
   core.py      Case, ModelAdapter, Evaluator, EvaluationResult
   model.py     JSON-over-HTTP adapter
   report.py    Report aggregation and JSON serialization
-  cli.py       argparse entry point
+  cli.py       argparse entry point (contains the echo adapter)
+  __main__.py  enables `python -m aitest`
 examples/      smoke.json, http-model.json
 tests/         unittest suite with fake adapters
 ```
