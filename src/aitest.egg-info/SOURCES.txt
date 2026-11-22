@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+src/aitest/__init__.py
+src/aitest/cli.py
+src/aitest/core.py
+src/aitest/model.py
+src/aitest/report.py
+src/aitest.egg-info/PKG-INFO
+src/aitest.egg-info/SOURCES.txt
+src/aitest.egg-info/dependency_links.txt
+src/aitest.egg-info/entry_points.txt
+src/aitest.egg-info/top_level.txt
+tests/test_core.py
+tests/test_report.py

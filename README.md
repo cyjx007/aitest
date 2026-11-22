@@ -1,51 +1,240 @@
 # aitest
 
-A small, dependency-free AI evaluation harness for prompt and model regression testing.
+[![test](https://github.com/cyjx007/aitest/actions/workflows/test.yml/badge.svg)](https://github.com/cyjx007/aitest/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## What it does
+**A dependency-free harness for AI prompt and model regression tests.**
 
-- Define test cases as JSON.
-- Run a model adapter against those cases.
-- Apply deterministic assertions to outputs.
-- Produce a machine-readable JSON report and a human-friendly summary.
-- Keep the core protocol independent of any model provider.
+English · [中文](README.zh-CN.md)
+
+`aitest` runs a JSON list of test cases against a model adapter, applies
+deterministic assertions to the returned text, and reports the result in the
+terminal or as JSON. The core uses only the Python standard library, so it can
+run in CI without installing a provider SDK.
+
+The project is intentionally small. The generic JSON-over-HTTP adapter covers
+simple services; provider-specific behaviour is meant to live in adapters that
+implement the `ModelAdapter` protocol. There are no built-in OpenAI, Anthropic
+or local-model integrations yet.
+
+## Features
+
+- **JSON test cases** — `id`, `input`, and optional substring or exact-match
+  assertions.
+- **Pluggable adapters** — a one-method protocol (`generate(prompt) -> str`).
+- **Built-in HTTP adapter** — POSTs `{"prompt": ...}` and accepts `output` or
+  `text` in the JSON response.
+- **Echo adapter** — a smoke-test double that returns the prompt unchanged.
+- **Human and machine output** — per-case PASS/FAIL lines, or `--json` for CI.
+- **Correct exit status** — `0` when every case passes, `1` otherwise.
+
+## Requirements
+
+- Python 3.10 or newer.
+- No third-party runtime dependencies.
+
+## Install
+
+```bash
+git clone https://github.com/cyjx007/aitest.git
+cd aitest
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+aitest --help
+```
+
+On Windows, activate the environment with `.venv\Scripts\activate` instead.
 
 ## Quick start
 
+Run the bundled smoke test with the echo adapter:
+
 ```bash
-python -m aitest --help
-python -m unittest discover -s tests -v
+aitest examples/smoke.json
 ```
 
-A test case looks like:
+Expected output:
+
+```text
+[PASS] echo-1
+[PASS] echo-2
+
+2/2 passed
+```
+
+Emit a machine-readable report:
+
+```bash
+aitest examples/smoke.json --json
+```
+
+If you do not want to install the package, run it from the checkout:
+
+```bash
+PYTHONPATH=src python -m aitest examples/smoke.json
+```
+
+## Test case format
+
+A test file is a JSON array. Every case needs `id` and `input`; the assertions
+are optional:
+
+```json
+[
+  {
+    "id": "greeting",
+    "input": "Say hello",
+    "expected_contains": ["hello"],
+    "expected_not_contains": ["error"]
+  },
+  {
+    "id": "exact-answer",
+    "input": "What is 6 times 7?",
+    "exact": "42"
+  }
+]
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | Case name shown in the report. |
+| `input` | yes | Prompt passed to the adapter. |
+| `expected_contains` | no | Substrings that must appear in the output. |
+| `expected_not_contains` | no | Substrings that must not appear. |
+| `exact` | no | Exact output the adapter must return. |
+
+`expected_contains` and `expected_not_contains` are case-insensitive substring
+checks. `exact` is a case-sensitive full-string comparison. All supplied
+assertions must pass; a case with no assertions only checks that the adapter
+returned without raising.
+
+## Model adapters
+
+### Echo adapter
+
+When `--url` is omitted, the CLI uses the echo adapter. It returns the prompt
+unchanged and is only useful for checking the harness and the test file.
+
+### HTTP adapter
+
+The bundled adapter sends a JSON request and reads a JSON response:
+
+```text
+POST <url>
+Content-Type: application/json
+
+{"prompt": "..."}
+```
+
+The response must be a JSON object with a string field named `output` or
+`text`:
+
+```json
+{"output": "hello"}
+```
+
+Point the CLI at an endpoint:
+
+```bash
+aitest examples/http-model.json --url http://127.0.0.1:8000/generate
+aitest examples/http-model.json --url http://127.0.0.1:8000/generate --timeout 60
+```
+
+`--timeout` is in seconds and defaults to 30. The adapter has no built-in
+authentication headers; put an authenticating reverse proxy in front of the
+endpoint, or implement a custom adapter.
+
+### Custom adapter
+
+Implement `generate()` and pass the adapter to `Evaluator`:
+
+```python
+from aitest import Case, Evaluator
+
+
+class MyAdapter:
+    def generate(self, prompt: str) -> str:
+        return call_my_model(prompt)
+
+
+results = Evaluator(MyAdapter()).run([
+    Case(id="greeting", input="Say hello", expected_contains=["hello"]),
+])
+
+for result in results:
+    print(result.case_id, result.passed, result.failures)
+```
+
+## CLI reference
+
+```text
+aitest [FILE] [--json] [--url URL] [--timeout SECONDS]
+```
+
+| Option | Description |
+| --- | --- |
+| `FILE` | JSON test-case file. Without it, the CLI prints help and exits `0`. |
+| `--json` | Print the structured report instead of PASS/FAIL lines. |
+| `--url URL` | Use the JSON-over-HTTP adapter instead of the echo adapter. |
+| `--timeout N` | HTTP timeout in seconds (default `30`). |
+
+The human-readable report prints one `[PASS]` or `[FAIL]` line per case,
+followed by the failures and a `passed/total` summary. The JSON report has this
+shape:
 
 ```json
 {
-  "id": "greeting",
-  "input": "Say hello",
-  "expected_contains": ["hello"]
+  "passed": false,
+  "total": 2,
+  "passed_count": 1,
+  "failed_count": 1,
+  "results": [
+    {
+      "case_id": "greeting",
+      "passed": true,
+      "output": "hello",
+      "failures": []
+    }
+  ]
 }
 ```
 
-The built-in `echo` adapter is useful for smoke tests. Provider integrations can implement the `ModelAdapter` protocol without changing the evaluator. A generic JSON-over-HTTP adapter is included for simple services.
+If the adapter raises (for example, the HTTP endpoint is unreachable), the run
+aborts with the exception instead of producing a partial report.
 
-## Design
+## Project layout
 
-`aitest` deliberately separates:
-
-1. **Adapter** — talks to a model.
-2. **Case** — describes one evaluation.
-3. **Evaluator** — checks the returned text.
-4. **Reporter** — serializes results for CI and humans.
-
-The project is intentionally small so it can become a foundation for provider-specific adapters, LLM-as-judge evaluators, latency/cost metrics, datasets, and CI gates later.
-
-### HTTP model endpoint
-
-Point the CLI at an endpoint that accepts a JSON body containing the prompt field and returns a JSON object containing output or text:
-
-```bash
-PYTHONPATH=src python -m aitest examples/http-model.json --url http://localhost:8000/generate
+```text
+src/aitest/
+  core.py      Case, ModelAdapter, Evaluator, EvaluationResult
+  model.py     JSON-over-HTTP adapter
+  report.py    Report aggregation and JSON serialization
+  cli.py       argparse entry point
+examples/      smoke.json, http-model.json
+tests/         unittest suite with fake adapters
 ```
 
-Use `--json` to emit a CI-friendly report.
+## Development and tests
+
+```bash
+python -m pip install -e .
+python -m unittest discover -s tests -v
+PYTHONPATH=src python -m aitest examples/smoke.json
+```
+
+The test suite uses fake adapters and does not call a real model. CI runs the
+tests on Python 3.10 through 3.13.
+
+## Limitations
+
+- Requests are synchronous and sequential; there is no concurrency or retry.
+- There are no latency, token or cost metrics.
+- The HTTP adapter supports one request/response shape and no authentication.
+- Test files are static JSON; there is no dataset templating or matrix
+  expansion.
+- Assertions are deterministic text checks, not model-based judging.
+
+## License
+
+[MIT](LICENSE).
